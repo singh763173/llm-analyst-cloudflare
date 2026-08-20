@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Analyst — Full Table</title>
+  <meta name="description" content="Full table view of Ollama models with categories, sizes and capabilities.">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/css/styles.css?v=1" />
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <script src="https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="brand">
+        <i class="ph ph-brain"></i>
+        <span>LLM Analyst</span>
+      </a>
+      <nav class="nav">
+        <a href="/">Cards</a>
+        <a href="/table.html" class="active">Full Table</a>
+      </nav>
+      <div class="header-actions">
+        <button id="refreshBtn" class="btn btn-secondary">
+          <i class="ph ph-arrows-clockwise"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top:1.5rem">
+    <h1 style="color:var(--navy);margin-bottom:1rem">Full Model Table</h1>
+    <p id="statusLine" class="status-line"><i class="ph ph-spinner ph-spin"></i> Loading models…</p>
+
+    <div class="table-container">
+      <table class="models-table" id="modelsTable">
+        <thead>
+          <tr>
+            <th data-sort="name">Name</th>
+            <th data-sort="primary_category">Category</th>
+            <th data-sort="size_band">Size</th>
+            <th>Capabilities</th>
+            <th data-sort="pull_value">Pulls</th>
+            <th data-sort="estimated_updated_iso">Updated</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Built for LLM Analyst · Data from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a></p>
+    </div>
+  </footer>
+
+  <script src="/js/app.js?v=1"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp('table');
+      loadTable();
+    });
+
+    async function loadTable() {
+      const status = document.getElementById('statusLine');
+      const tbody = document.getElementById('tableBody');
+      try {
+        const resp = await fetch('/api/models');
+        const data = await resp.json();
+        const models = data.models || [];
+        tbody.innerHTML = models.map(m => `
+          <tr>
+            <td><a href="${m.ollama_url}" target="_blank" rel="noopener">${m.name}</a></td>
+            <td>${m.primary_category || m.categories?.[0] || ''}</td>
+            <td>${m.size_band || 'Unknown'}</td>
+            <td>${Object.entries(m.capabilities || {}).filter(([_,v])=>v).map(([k])=>k).join(', ')}</td>
+            <td>${m.pull_count || ''}</td>
+            <td>${m.relative_updated || ''}</td>
+          </tr>
+        `).join('');
+        status.innerHTML = `<i class="ph ph-check-circle"></i> ${models.length} models loaded`;
+      } catch (e) {
+        status.innerHTML = `<i class="ph ph-warning-circle"></i> Failed: ${e.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
