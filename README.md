@@ -28,7 +28,7 @@ This version keeps the same core behaviour as the original LLM Analyst, but repl
 ```
 Visitor
   ↓
-Cloudflare Pages (static HTML/CSS/JS in /static)
+Cloudflare Pages (static HTML/CSS/JS in project root)
   ↓
 Cloudflare Functions (functions/api/[[routes]].js)
   ↓
