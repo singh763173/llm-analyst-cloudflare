@@ -42,7 +42,7 @@ Ollama.com/library (rescraped hourly by functions/scheduled-scrape.js)
 ## Differences from the main repo
 
 | Feature | Main repo (Python) | Cloudflare fork |
-|---|---|---|
+|---|---|---|---|
 | Backend | FastAPI + Uvicorn | Cloudflare Functions |
 | Scraper | Python + BeautifulSoup | JavaScript + regex HTML parsing |
 | Cache | Local JSON file | Cloudflare KV |
@@ -65,13 +65,17 @@ Ollama.com/library (rescraped hourly by functions/scheduled-scrape.js)
    ```
    Copy the returned ID into `wrangler.toml`.
 
-3. Seed the cache by running a local refresh:
+3. Start the local dev server:
    ```bash
    npx wrangler dev
    ```
-   Then visit `http://localhost:8787/api/refresh`.
 
-4. Open the app:
+4. Seed the cache by visiting:
+   ```
+   http://localhost:8787/api/refresh
+   ```
+
+5. Open the app:
    ```
    http://localhost:8787/
    ```
@@ -85,9 +89,6 @@ Ollama.com/library (rescraped hourly by functions/scheduled-scrape.js)
 npx wrangler login
 
 # Deploy
-npx wrangler deploy
-
-# Or for Pages
 npx wrangler pages deploy .
 ```
 
@@ -101,7 +102,7 @@ Make sure `wrangler.toml` has:
 ## API endpoints
 
 | Endpoint | Method | Description |
-|---|---|---|
+|---|---|---|---|
 | `/` | GET | Static app (card view) |
 | `/table.html` | GET | Static full table view |
 | `/api/models` | GET | Cached model data (triggers background rescrape if stale) |
@@ -116,7 +117,7 @@ After deploying, add a custom domain in the Cloudflare dashboard:
 
 1. Go to **Workers & Pages → llm-analyst → Custom domains**
 2. Click **Set up a custom domain**
-3. Enter `llm.singh90.co.uk` (or your domain)
+3. Enter your domain (e.g. `llm.singh90.co.uk`)
 4. Cloudflare will automatically create the DNS record if the zone is active
 
 ---
