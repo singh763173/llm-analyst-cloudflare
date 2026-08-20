@@ -137,10 +137,6 @@ This fork is maintained alongside the main [llm-analyst](https://github.com/sing
 
 ## License
 
-See the main repo for license details.
+MIT — see `LICENSE` for details.
 
 Data sourced from [ollama.com/library](https://ollama.com/library).
-
----
-
-Built by Amarjot Singh (Ajay).

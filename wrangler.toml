@@ -5,7 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "LLM_ANALYST_CACHE"
-id = "697dd18ae9db458586b463006e2ddd5e"
+# Create with: npx wrangler kv namespace create "LLM_ANALYST_CACHE"
+# Then paste the returned id here before deploying.
+id = "YOUR_KV_NAMESPACE_ID"
 
 [site]
 bucket = "."
