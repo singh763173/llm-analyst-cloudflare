@@ -1,4 +1,4 @@
-import { scrapeAll } from './scraper.js';
+import { scrapeAll } from '../scraper.js';
 
 const CACHE_KEY = 'models.json';
 const CACHE_MAX_AGE_SECONDS = 3600;
