@@ -3,28 +3,59 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LLM Analyst — Full Table</title>
-  <meta name="description" content="Full table view of Ollama models with categories, sizes and capabilities.">
+
+  <title>LLM Analyst — Full Model Table</title>
+  <meta name="description" content="Sort, search and compare every model in the Ollama library in one filterable table.">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://llm.singh90.co.uk/table.html" />
+  <meta property="og:title" content="LLM Analyst — Full Model Table" />
+  <meta property="og:description" content="Sort, search and compare every model in the Ollama library in one filterable table." />
+  <meta property="og:image" content="https://llm.singh90.co.uk/og-image.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://llm.singh90.co.uk/table.html" />
+  <meta property="twitter:title" content="LLM Analyst — Full Model Table" />
+  <meta property="twitter:description" content="Sort, search and compare every model in the Ollama library in one filterable table." />
+  <meta property="twitter:image" content="https://llm.singh90.co.uk/og-image.png" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LLMAnalyst" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="shortcut icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/css/styles.css?v=2" />
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <script src="https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"></script>
-  <link rel="manifest" href="/manifest.json" />
 </head>
-<body>
+<body class="table-page">
+  <a href="#main" class="skip-link">Skip to main content</a>
+
   <header class="site-header">
     <div class="container header-inner">
       <a href="/" class="brand">
         <i class="ph ph-brain"></i>
-        <span>LLM Analyst</span>
+        <span>LLMAnalyst</span>
       </a>
       <nav class="nav">
-        <a href="/">Cards</a>
+        <a href="/index.html">Cards</a>
         <a href="/table.html" class="active">Full Table</a>
       </nav>
       <div class="header-actions">
-        <button id="refreshBtn" class="btn btn-secondary">
+        <button id="darkModeToggle" class="btn btn-ghost" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <i class="ph ph-moon"></i>
+          <span>Dark</span>
+        </button>
+        <button id="refreshBtn" class="btn btn-secondary" title="Refresh model list from Ollama (R)">
           <i class="ph ph-arrows-clockwise"></i>
           <span>Refresh</span>
         </button>
@@ -32,119 +63,107 @@
     </div>
   </header>
 
-  <main class="container" style="padding-top:1.5rem">
-    <h1 style="color:var(--navy);margin-bottom:1rem">Full Model Table</h1>
-    <p id="statusLine" class="status-line"><i class="ph ph-spinner ph-spin"></i> Loading models…</p>
+  <main class="container main" id="main">
+    <section class="hero">
+      <h1>Full model table</h1>
+      <p class="subtitle">Sort, search, and compare every Ollama model in one place.</p>
+      <p id="statusLine" class="status-line"><i class="ph ph-spinner ph-spin"></i> Loading models…</p>
+    </section>
 
-    <div class="table-container">
+    <section class="filters filters-table" aria-label="Filters">
+      <div class="filters-toolbar">
+        <div class="search-box">
+          <i class="ph ph-magnifying-glass"></i>
+          <input type="search" id="searchInput" placeholder="Search models, tags, descriptions… (/)" autocomplete="off" />
+        </div>
+        <div class="toolbar-actions">
+          <div class="export-buttons" id="exportButtons"></div>
+          <button id="clearFilters" class="btn btn-ghost toolbar-clear">
+            <i class="ph ph-x-circle"></i>
+            <span>Clear</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-groups">
+        <div class="filter-group filter-group-presets">
+          <span class="filter-group-label"><i class="ph ph-lightning"></i> Quick filters</span>
+          <div class="chips" id="presetChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-categories">
+          <span class="filter-group-label"><i class="ph ph-tag"></i> Category</span>
+          <div class="chips" id="categoryChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-sizes">
+          <span class="filter-group-label"><i class="ph ph-resize"></i> Size</span>
+          <div class="chips" id="sizeChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-availability">
+          <span class="filter-group-label"><i class="ph ph-cloud"></i> Availability</span>
+          <div class="chips" id="availChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-capabilities">
+          <span class="filter-group-label"><i class="ph ph-lightning"></i> Capabilities</span>
+          <div class="chips" id="capChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-recency">
+          <span class="filter-group-label"><i class="ph ph-calendar"></i> Recency</span>
+          <div class="chips" id="recencyChips"></div>
+        </div>
+      </div>
+
+      <div class="filter-row active-filters-row" id="activeFiltersRow">
+        <div class="active-filters" id="activeFilters"></div>
+        <span id="resultCount" class="result-count"></span>
+      </div>
+    </section>
+
+    <section class="table-wrap">
       <table class="models-table" id="modelsTable">
         <thead>
           <tr>
-            <th data-sort="name">Name</th>
-            <th data-sort="primary_category">Category</th>
-            <th data-sort="size_band">Size</th>
-            <th>Capabilities</th>
-            <th data-sort="pull_value" data-sort-type="numeric">Pulls</th>
-            <th data-sort="estimated_updated_iso" data-sort-type="date">Updated</th>
+            <th scope="col" data-sort="name">Model <i class="ph ph-caret-up-down"></i></th>
+            <th scope="col" data-sort="primary_category">Primary Use <i class="ph ph-caret-up-down"></i></th>
+            <th scope="col" data-sort="size_band">Size <i class="ph ph-caret-up-down"></i></th>
+            <th scope="col">Capabilities</th>
+            <th scope="col" title="Cloud">Cloud</th>
+            <th scope="col" title="Hermes/Claw">Hermes</th>
+            <th scope="col" data-sort="estimated_updated_iso">Updated <i class="ph ph-caret-up-down"></i></th>
+            <th scope="col" data-sort="pull_value">Pulls <i class="ph ph-caret-up-down"></i></th>
+            <th scope="col">Link</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
-    </div>
+    </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <p>Built for LLM Analyst · Data from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a></p>
+      <p>Built for LLMAnalyst · Data from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a></p>
     </div>
   </footer>
 
+  <div id="modelModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-content">
+      <div id="modelModalBody"></div>
+    </div>
+  </div>
+
   <script src="/js/app.js?v=2"></script>
   <script>
-    let tableModels = [];
-    let tableSort = { key: null, dir: 'asc' };
-
     document.addEventListener('DOMContentLoaded', () => {
       initApp('table');
-      loadTable();
-      bindTableSort();
-    });
-
-    async function loadTable() {
-      const status = document.getElementById('statusLine');
-      try {
-        const resp = await fetch('/api/models');
-        const data = await resp.json();
-        tableModels = data.models || [];
-        renderTable(tableModels);
-        status.innerHTML = `<i class="ph ph-check-circle"></i> ${tableModels.length} models loaded`;
-      } catch (e) {
-        status.innerHTML = `<i class="ph ph-warning-circle"></i> Failed: ${e.message}`;
+      checkModelHashOnLoad();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
       }
-    }
-
-    function renderTable(models) {
-      const tbody = document.getElementById('tableBody');
-      tbody.innerHTML = models.map(m => `
-        <tr>
-          <td><a href="${m.ollama_url}" target="_blank" rel="noopener">${m.name}</a></td>
-          <td>${m.primary_category || m.categories?.[0] || ''}</td>
-          <td>${m.size_band || 'Unknown'}</td>
-          <td>${Object.entries(m.capabilities || {}).filter(([_,v])=>v).map(([k])=>k).join(', ')}</td>
-          <td data-numeric="${numericPull(m.pull_value || m.pull_count)}">${m.pull_value || formatPullCount(m.pull_count) || ''}</td>
-          <td data-date="${m.estimated_updated_iso || ''}">${m.relative_updated || ''}</td>
-        </tr>
-      `).join('');
-    }
-
-    function bindTableSort() {
-      document.querySelectorAll('#modelsTable th[data-sort]').forEach(th => {
-        th.style.cursor = 'pointer';
-        th.addEventListener('click', () => {
-          const key = th.dataset.sort;
-          const type = th.dataset.sortType || 'string';
-          if (tableSort.key === key) {
-            tableSort.dir = tableSort.dir === 'asc' ? 'desc' : 'asc';
-          } else {
-            tableSort = { key, dir: 'asc' };
-          }
-          document.querySelectorAll('#modelsTable th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
-          th.classList.add(tableSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
-          const sorted = sortModels(tableModels, key, type, tableSort.dir);
-          renderTable(sorted);
-        });
-      });
-    }
-
-    function sortModels(models, key, type, dir) {
-      const sorted = [...models].sort((a, b) => {
-        let va = a[key];
-        let vb = b[key];
-        if (type === 'numeric') {
-          va = numericPull(va || a.pull_count);
-          vb = numericPull(vb || b.pull_count);
-        } else if (type === 'date') {
-          va = new Date(va || 0).getTime();
-          vb = new Date(vb || 0).getTime();
-        } else {
-          va = String(va || '').toLowerCase();
-          vb = String(vb || '').toLowerCase();
-        }
-        if (va < vb) return dir === 'asc' ? -1 : 1;
-        if (va > vb) return dir === 'asc' ? 1 : -1;
-        return 0;
-      });
-      return sorted;
-    }
-
-    function numericPull(text) {
-      if (!text) return 0;
-      const m = String(text).match(/([\d,]+(?:\.\d+)?)\s*([KMB]?)/i);
-      if (!m) return 0;
-      const raw = parseFloat(m[1].replace(/,/g, ''));
-      const mult = { K: 1e3, M: 1e6, B: 1e9 }[m[2].toUpperCase()] || 1;
-      return raw * mult;
-    }
+    });
   </script>
 </body>
 </html>

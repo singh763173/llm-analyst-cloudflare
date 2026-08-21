@@ -3,20 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>LLM Analyst — Ollama Model Explorer</title>
-  <meta name="description" content="Find the right Ollama model for coding, agents, vision, STEM, embeddings and more. Filter by capability, size, cloud availability and Hermes compatibility.">
+  <meta name="description" content="Find the right Ollama model for coding, agents, vision, STEM, embeddings and more. Filter by capability, size, cloud availability and agent compatibility.">
+
+  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://llm.singh90.co.uk/" />
   <meta property="og:title" content="LLM Analyst — Ollama Model Explorer" />
   <meta property="og:description" content="Find the right Ollama model for every task. Filter by capability, size, cloud availability and agent compatibility." />
   <meta property="og:image" content="https://llm.singh90.co.uk/og-image.png" />
+
+  <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image" />
   <meta property="twitter:url" content="https://llm.singh90.co.uk/" />
   <meta property="twitter:title" content="LLM Analyst — Ollama Model Explorer" />
   <meta property="twitter:description" content="Find the right Ollama model for every task. Filter by capability, size, cloud availability and agent compatibility." />
   <meta property="twitter:image" content="https://llm.singh90.co.uk/og-image.png" />
+
+  <!-- PWA -->
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#0A2463" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LLMAnalyst" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="shortcut icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/css/styles.css?v=2" />
@@ -24,19 +38,24 @@
   <script src="https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"></script>
 </head>
 <body>
-  <a href="#main" class="skip-link">Skip to content</a>
+  <a href="#main" class="skip-link">Skip to main content</a>
+
   <header class="site-header">
     <div class="container header-inner">
       <a href="/" class="brand">
         <i class="ph ph-brain"></i>
-        <span>LLM Analyst</span>
+        <span>LLMAnalyst</span>
       </a>
       <nav class="nav">
-        <a href="/" class="active">Cards</a>
+        <a href="/index.html" class="active">Cards</a>
         <a href="/table.html">Full Table</a>
       </nav>
       <div class="header-actions">
-        <button id="refreshBtn" class="btn btn-secondary" title="Refresh model list from Ollama">
+        <button id="darkModeToggle" class="btn btn-ghost" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <i class="ph ph-moon"></i>
+          <span>Dark</span>
+        </button>
+        <button id="refreshBtn" class="btn btn-secondary" title="Refresh model list from Ollama (R)">
           <i class="ph ph-arrows-clockwise"></i>
           <span>Refresh</span>
         </button>
@@ -44,44 +63,64 @@
     </div>
   </header>
 
-  <main class="container" id="main">
+  <main class="container main" id="main">
     <section class="hero">
       <h1>Pick the right Ollama model for the job</h1>
       <p class="subtitle">Filter by purpose, cloud availability, agent compatibility, size, recency, and capabilities. Data pulled live from ollama.com/library.</p>
       <p id="statusLine" class="status-line"><i class="ph ph-spinner ph-spin"></i> Loading models…</p>
     </section>
 
+    <section id="heroChart" class="hero-chart" style="display:none;"></section>
+
     <section class="filters" aria-label="Filters">
       <div class="filters-toolbar">
         <div class="search-box">
           <i class="ph ph-magnifying-glass"></i>
-          <input type="search" id="searchInput" placeholder="Search models, tags, descriptions…" autocomplete="off" />
+          <input type="search" id="searchInput" placeholder="Search models, tags, descriptions… (/)" autocomplete="off" />
         </div>
         <div class="toolbar-actions">
-          <button class="btn btn-ghost" id="clearFilters"><i class="ph ph-x-circle"></i> Clear</button>
+          <div class="sort-control" id="sortControl"></div>
+          <div class="export-buttons" id="exportButtons"></div>
+          <button id="clearFilters" class="btn btn-ghost toolbar-clear">
+            <i class="ph ph-x-circle"></i>
+            <span>Clear</span>
+          </button>
         </div>
       </div>
 
       <div class="filter-groups">
-        <div class="filter-group">
+        <div class="filter-group filter-group-presets">
+          <span class="filter-group-label"><i class="ph ph-lightning"></i> Quick filters</span>
+          <div class="chips" id="presetChips"></div>
+        </div>
+
+        <div class="filter-group filter-group-categories">
           <span class="filter-group-label"><i class="ph ph-tag"></i> Category</span>
           <div class="chips" id="categoryChips"></div>
         </div>
-        <div class="filter-group">
+
+        <div class="filter-group filter-group-sizes">
           <span class="filter-group-label"><i class="ph ph-resize"></i> Size</span>
           <div class="chips" id="sizeChips"></div>
         </div>
-        <div class="filter-group">
+
+        <div class="filter-group filter-group-availability">
           <span class="filter-group-label"><i class="ph ph-cloud"></i> Availability</span>
           <div class="chips" id="availChips"></div>
         </div>
-        <div class="filter-group">
+
+        <div class="filter-group filter-group-capabilities">
           <span class="filter-group-label"><i class="ph ph-lightning"></i> Capabilities</span>
           <div class="chips" id="capChips"></div>
         </div>
+
+        <div class="filter-group filter-group-recency">
+          <span class="filter-group-label"><i class="ph ph-calendar"></i> Recency</span>
+          <div class="chips" id="recencyChips"></div>
+        </div>
       </div>
 
-      <div class="active-filters-row">
+      <div class="filter-row active-filters-row" id="activeFiltersRow">
         <div class="active-filters" id="activeFilters"></div>
         <span id="resultCount" class="result-count"></span>
       </div>
@@ -92,11 +131,25 @@
 
   <footer class="site-footer">
     <div class="container">
-      <p>Built for LLM Analyst · Data from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a></p>
+      <p>Built for LLMAnalyst · Data from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a></p>
     </div>
   </footer>
 
+  <div id="modelModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-content">
+      <div id="modelModalBody"></div>
+    </div>
+  </div>
+
   <script src="/js/app.js?v=2"></script>
-  <script>document.addEventListener('DOMContentLoaded', () => initApp('cards'));</script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp('cards');
+      checkModelHashOnLoad();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+    });
+  </script>
 </body>
 </html>

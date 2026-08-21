@@ -1,4 +1,4 @@
-const CACHE_NAME = 'llmanalyst-v2';
+const CACHE_NAME = 'llmanalyst-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,7 +8,7 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/favicon.ico',
   '/favicon-32x32.png',
-  '/og-image.png'
+  '/og-image.png',
 ];
 
 self.addEventListener('install', (event) => {
