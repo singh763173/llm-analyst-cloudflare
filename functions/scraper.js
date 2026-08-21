@@ -129,19 +129,20 @@ async function fetchModelPage(name) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const html = await r.text();
     const description = extractMetaDescription(html);
-    const pullCount = extractPattern(html, /pull|download/i, 'span');
-    const relativeUpdated = extractRelativeUpdated(html);
+    const pageStats = extractStatsFromBlock(html);
+    const relativeUpdated = pageStats.relativeUpdated || extractRelativeUpdated(html);
     const pageTags = extractTags(html);
     const parsed = parseRelativeDate(relativeUpdated);
     return {
       description,
-      pull_count: pullCount.text,
+      pull_count: pageStats.pullCount || '',
+      pull_value: pageStats.pullValue || normalizePullValue(pageStats.pullCount || ''),
       relative_updated: parsed.relative,
       estimated_updated_iso: parsed.estimated_iso,
       tags: pageTags
     };
   } catch (e) {
-    return { description: '', pull_count: '', relative_updated: '', estimated_updated_iso: null, tags: [], error: e.message };
+    return { description: '', pull_count: '', pull_value: '', relative_updated: '', estimated_updated_iso: null, tags: [], error: e.message };
   }
 }
 
@@ -173,7 +174,90 @@ function extractPattern(html, pattern, tagName) {
   return { text: '' };
 }
 
+function stripHtmlEntities(text) {
+  return String(text)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .trim();
+}
+
+function parseStatBlock(html) {
+  // Ollama lists stats in a <p class="... flex space-x-5 ..."> containing top-level
+  // <span class="flex items-center"> children. Each child contains an SVG, a value
+  // <span>, and an optional label <span class="hidden sm:flex">.
+  // We extract the full outer span blocks (handling nested spans) and convert to text.
+  const spans = extractOuterSpanBlocks(html, 'flex items-center');
+  return spans.map(inner => {
+    let text = inner
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<[^\u003e]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return stripHtmlEntities(text);
+  });
+}
+
+function extractOuterSpanBlocks(html, className) {
+  // Return the inner HTML of each top-level <span> whose opening tag contains className.
+  const openRe = /<span(\s[^\u003e]*)?>/gi;
+  const closeRe = /<\/span>/gi;
+  const opens = [...html.matchAll(openRe)].map(m => ({ index: m.index, text: m[0] }));
+  const closes = [...html.matchAll(closeRe)].map(m => m.index);
+  const segments = [];
+  let depth = 0;
+  let start = null;
+  let oi = 0, ci = 0;
+  while (oi < opens.length || ci < closes.length) {
+    const nextOpen = oi < opens.length ? opens[oi].index : Infinity;
+    const nextClose = ci < closes.length ? closes[ci] : Infinity;
+    if (nextOpen < nextClose) {
+      if (depth === 0) start = opens[oi].index;
+      depth++;
+      oi++;
+    } else {
+      depth--;
+      if (depth === 0 && start !== null) {
+        const openTag = html.slice(start, opens.find(o => o.index === start).index + opens.find(o => o.index === start).text.length);
+        const innerStart = start + openTag.length;
+        const innerEnd = nextClose;
+        if (!className || openTag.includes(className)) {
+          segments.push(html.slice(innerStart, innerEnd));
+        }
+        start = null;
+      }
+      ci++;
+    }
+  }
+  return segments;
+}
+
+function extractStatsFromBlock(block) {
+  const stats = {};
+  const pRe = /<p[^>]*class=["'][^"']*flex space-x-5[^"']*["'][^>]*>([\s\S]*?)<\/p>/i;
+  const pMatch = block.match(pRe);
+  if (!pMatch) return stats;
+  const statEntries = parseStatBlock(pMatch[1]);
+  for (const entry of statEntries) {
+    const lower = entry.toLowerCase();
+    if (/pulls?/.test(lower) && !stats.pullCount) {
+      stats.pullCount = entry;
+      stats.pullValue = normalizePullValue(entry);
+    } else if (/tags?/.test(lower)) {
+      // ignore tag count; handled by tag spans
+    } else if (/updated|ago|today|yesterday/.test(lower) && !stats.relativeUpdated) {
+      stats.relativeUpdated = entry;
+    }
+  }
+  return stats;
+}
+
 function extractRelativeUpdated(html) {
+  const stats = extractStatsFromBlock(html);
+  if (stats.relativeUpdated) return stats.relativeUpdated;
+  // Fallback for older or detail-page layouts
   const re = /<span[^>]*class=["'][^"']*(?:flex|items-center)[^"']*["'][^>]*>([^<]*)<\/span>/gi;
   let m;
   while ((m = re.exec(html)) !== null) {
@@ -191,6 +275,15 @@ function extractRelativeUpdated(html) {
 function normalizePullValue(text) {
   const m = String(text).match(/([\d,]+(?:\.\d+)?)([KMB]?)\s*(?:Pulls?|Downloads?)/i);
   if (!m) return '';
+  const raw = m[1].replace(/,/g, '');
+  const suffix = m[2].toUpperCase();
+  return suffix ? `${raw}${suffix}` : raw;
+}
+
+function formatPullCount(value, label) {
+  // value might be '118.7M' or '1,234'. Return clean "1.2M" etc.
+  const m = String(value).match(/([\d,]+(?:\.\d+)?)([KMB]?)/i);
+  if (!m) return value;
   const raw = m[1].replace(/,/g, '');
   const suffix = m[2].toUpperCase();
   return suffix ? `${raw}${suffix}` : raw;
@@ -216,24 +309,10 @@ async function scrapeLibrary() {
       const txt = tm[1].trim();
       if (txt && !tags.includes(txt)) tags.push(txt);
     }
-    let pullCount = '';
-    let pullValue = '';
-    let relativeUpdated = '';
-    const flexRe = /<span[^>]*class=["'][^"']*(?:flex|items-center)[^"']*["'][^>]*>([^<]*)<\/span>/gi;
-    let fm;
-    while ((fm = flexRe.exec(block)) !== null) {
-      const txt = fm[1].trim();
-      const lower = txt.toLowerCase();
-      if ((lower.includes('pull') || lower.includes('download')) && !pullCount) {
-        pullCount = txt;
-        pullValue = normalizePullValue(txt);
-      }
-      if (/updated\s+\d+\s+(second|minute|hour|day|week|month|year)s?\s+ago|today|yesterday/.test(lower) && !relativeUpdated) {
-        relativeUpdated = txt;
-      } else if (/\d+\s+(second|minute|hour|day|week|month|year)s?\s+ago/.test(lower) && !relativeUpdated) {
-        relativeUpdated = `Updated ${txt}`;
-      }
-    }
+    const extractedStats = extractStatsFromBlock(block);
+    let pullCount = extractedStats.pullCount || '';
+    let pullValue = extractedStats.pullValue || '';
+    let relativeUpdated = extractedStats.relativeUpdated || '';
     const cloud = /<span[^>]*>\s*[Cc][Ll][Oo][Uu][Dd]\s*<\/span>/.test(block);
     items.push({
       name,

@@ -258,6 +258,8 @@ function renderCards(models) {
     const category = m.primary_category || m.categories?.[0] || 'General Chat / Assistant';
     const colour = CATEGORY_COLOURS[category]?.text || 'inherit';
 
+    const pullDisplay = m.pull_value || formatPullCount(m.pull_count);
+
     return `
       <article class="model-card" style="border-top:3px solid ${colour}">
         <div class="card-header">
@@ -270,12 +272,22 @@ function renderCards(models) {
         <div class="card-meta">
           <span style="color:${colour};font-weight:600">${escapeHtml(category)}</span>
           <span><i class="ph ph-resize"></i> ${escapeHtml(m.size_band || 'Unknown')}</span>
-          ${m.pull_count ? `<span><i class="ph ph-download-simple"></i> ${escapeHtml(m.pull_count)}</span>` : ''}
+          ${pullDisplay ? `<span><i class="ph ph-download-simple"></i> ${escapeHtml(pullDisplay)}</span>` : ''}
           ${m.relative_updated ? `<span><i class="ph ph-clock"></i> ${escapeHtml(m.relative_updated)}</span>` : ''}
         </div>
       </article>
     `;
   }).join('');
+}
+
+function formatPullCount(text) {
+  if (!text) return '';
+  // text might be '118.7M Pulls' or just '1,234'
+  const m = String(text).match(/([\d,]+(?:\.\d+)?)([KMB]?)\s*(?:Pulls?|Downloads?)?/i);
+  if (!m) return '';
+  const raw = m[1].replace(/,/g, '');
+  const suffix = m[2].toUpperCase();
+  return suffix ? `${raw}${suffix}` : raw;
 }
 
 function escapeHtml(str) {
