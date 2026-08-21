@@ -734,7 +734,8 @@ async function loadModels(forceRefresh) {
 
     const previous = appState.previousModelNames;
     const currentNames = new Set((data.models || []).map((m) => m.name));
-    const newNames = [...currentNames].filter((n) => !previous.has(n));
+    // Only treat models as "new" if we have a real previous list to compare against.
+    const newNames = previous.size === 0 ? [] : [...currentNames].filter((n) => !previous.has(n));
     appState.newModels = newNames;
     appState.previousModelNames = currentNames;
     savePreviousModelNames();
