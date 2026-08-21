@@ -78,7 +78,7 @@
             <td>${m.primary_category || m.categories?.[0] || ''}</td>
             <td>${m.size_band || 'Unknown'}</td>
             <td>${Object.entries(m.capabilities || {}).filter(([_,v])=>v).map(([k])=>k).join(', ')}</td>
-            <td>${m.pull_count || ''}</td>
+            <td>${m.pull_value || formatPullCount(m.pull_count) || ''}</td>
             <td>${m.relative_updated || ''}</td>
           </tr>
         `).join('');
