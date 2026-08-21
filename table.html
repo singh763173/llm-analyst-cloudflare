@@ -7,9 +7,10 @@
   <meta name="description" content="Full table view of Ollama models with categories, sizes and capabilities.">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="shortcut icon" href="/favicon.ico" />
-  <link rel="stylesheet" href="/css/styles.css?v=1" />
+  <link rel="stylesheet" href="/css/styles.css?v=2" />
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <script src="https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <link rel="manifest" href="/manifest.json" />
 </head>
 <body>
   <header class="site-header">
@@ -43,8 +44,8 @@
             <th data-sort="primary_category">Category</th>
             <th data-sort="size_band">Size</th>
             <th>Capabilities</th>
-            <th data-sort="pull_value">Pulls</th>
-            <th data-sort="estimated_updated_iso">Updated</th>
+            <th data-sort="pull_value" data-sort-type="numeric">Pulls</th>
+            <th data-sort="estimated_updated_iso" data-sort-type="date">Updated</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -58,34 +59,91 @@
     </div>
   </footer>
 
-  <script src="/js/app.js?v=1"></script>
+  <script src="/js/app.js?v=2"></script>
   <script>
+    let tableModels = [];
+    let tableSort = { key: null, dir: 'asc' };
+
     document.addEventListener('DOMContentLoaded', () => {
       initApp('table');
       loadTable();
+      bindTableSort();
     });
 
     async function loadTable() {
       const status = document.getElementById('statusLine');
-      const tbody = document.getElementById('tableBody');
       try {
         const resp = await fetch('/api/models');
         const data = await resp.json();
-        const models = data.models || [];
-        tbody.innerHTML = models.map(m => `
-          <tr>
-            <td><a href="${m.ollama_url}" target="_blank" rel="noopener">${m.name}</a></td>
-            <td>${m.primary_category || m.categories?.[0] || ''}</td>
-            <td>${m.size_band || 'Unknown'}</td>
-            <td>${Object.entries(m.capabilities || {}).filter(([_,v])=>v).map(([k])=>k).join(', ')}</td>
-            <td>${m.pull_value || formatPullCount(m.pull_count) || ''}</td>
-            <td>${m.relative_updated || ''}</td>
-          </tr>
-        `).join('');
-        status.innerHTML = `<i class="ph ph-check-circle"></i> ${models.length} models loaded`;
+        tableModels = data.models || [];
+        renderTable(tableModels);
+        status.innerHTML = `<i class="ph ph-check-circle"></i> ${tableModels.length} models loaded`;
       } catch (e) {
         status.innerHTML = `<i class="ph ph-warning-circle"></i> Failed: ${e.message}`;
       }
+    }
+
+    function renderTable(models) {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = models.map(m => `
+        <tr>
+          <td><a href="${m.ollama_url}" target="_blank" rel="noopener">${m.name}</a></td>
+          <td>${m.primary_category || m.categories?.[0] || ''}</td>
+          <td>${m.size_band || 'Unknown'}</td>
+          <td>${Object.entries(m.capabilities || {}).filter(([_,v])=>v).map(([k])=>k).join(', ')}</td>
+          <td data-numeric="${numericPull(m.pull_value || m.pull_count)}">${m.pull_value || formatPullCount(m.pull_count) || ''}</td>
+          <td data-date="${m.estimated_updated_iso || ''}">${m.relative_updated || ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    function bindTableSort() {
+      document.querySelectorAll('#modelsTable th[data-sort]').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => {
+          const key = th.dataset.sort;
+          const type = th.dataset.sortType || 'string';
+          if (tableSort.key === key) {
+            tableSort.dir = tableSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            tableSort = { key, dir: 'asc' };
+          }
+          document.querySelectorAll('#modelsTable th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+          th.classList.add(tableSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+          const sorted = sortModels(tableModels, key, type, tableSort.dir);
+          renderTable(sorted);
+        });
+      });
+    }
+
+    function sortModels(models, key, type, dir) {
+      const sorted = [...models].sort((a, b) => {
+        let va = a[key];
+        let vb = b[key];
+        if (type === 'numeric') {
+          va = numericPull(va || a.pull_count);
+          vb = numericPull(vb || b.pull_count);
+        } else if (type === 'date') {
+          va = new Date(va || 0).getTime();
+          vb = new Date(vb || 0).getTime();
+        } else {
+          va = String(va || '').toLowerCase();
+          vb = String(vb || '').toLowerCase();
+        }
+        if (va < vb) return dir === 'asc' ? -1 : 1;
+        if (va > vb) return dir === 'asc' ? 1 : -1;
+        return 0;
+      });
+      return sorted;
+    }
+
+    function numericPull(text) {
+      if (!text) return 0;
+      const m = String(text).match(/([\d,]+(?:\.\d+)?)\s*([KMB]?)/i);
+      if (!m) return 0;
+      const raw = parseFloat(m[1].replace(/,/g, ''));
+      const mult = { K: 1e3, M: 1e6, B: 1e9 }[m[2].toUpperCase()] || 1;
+      return raw * mult;
     }
   </script>
 </body>

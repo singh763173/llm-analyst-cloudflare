@@ -63,8 +63,37 @@ function containsAny(text, keywords) {
 function extractSizes(tags) {
   const sizes = [];
   for (const tag of tags) {
-    const m = String(tag).toLowerCase().match(/^(\d+(?:\.\d+)?)(b)$/);
-    if (m) sizes.push(parseFloat(m[1]));
+    const t = String(tag).toLowerCase();
+    // Standard <number>b tags (7b, 70b, 405b)
+    const bMatch = t.match(/^(\d+(?:\.\d+)?)(b)$/);
+    if (bMatch) {
+      sizes.push(parseFloat(bMatch[1]));
+      continue;
+    }
+    // Size embedded in a tag like 7b-q2_K or 120b-q3_K_S
+    const bPrefixMatch = t.match(/^(\d+(?:\.\d+)?)(b)[-_]/);
+    if (bPrefixMatch) {
+      sizes.push(parseFloat(bPrefixMatch[1]));
+      continue;
+    }
+    // Some models use short codes: e2b, e4b, e8b etc.
+    const eMatch = t.match(/^e(\d+(?:\.\d+)?)(b)$/);
+    if (eMatch) {
+      sizes.push(parseFloat(eMatch[1]));
+      continue;
+    }
+    // Million-parameter tags (335m, 22m) stored as fractional B
+    const mMatch = t.match(/^(\d+(?:\.\d+)?)(m)$/);
+    if (mMatch) {
+      sizes.push(parseFloat(mMatch[1]) / 1000);
+      continue;
+    }
+    // MoE syntax like 8x7b and 8x22b
+    const moeMatch = t.match(/^(\d+)x(\d+(?:\.\d+)?)(b)$/);
+    if (moeMatch) {
+      sizes.push(parseFloat(moeMatch[1]) * parseFloat(moeMatch[2]));
+      continue;
+    }
   }
   return sizes;
 }
@@ -122,6 +151,55 @@ function parseRelativeDate(text) {
   return { relative: rel, estimated_iso: est.toISOString().replace(/\.\d{3}Z$/, 'Z') };
 }
 
+function extractTagsFromDropdown(html) {
+  // Fallback for older models whose main page has no visible chip tags.
+  // The tag dropdown/table lists links like /library/<name>:<tag>.
+  const tags = [];
+  const re = new RegExp(`href=["']\\/library\\/[^"']*:([^"']*)["']`, 'gi');
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const tag = m[1].trim();
+    if (tag && !tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+function extractSizesFromTagsPage(html) {
+  const sizes = [];
+  const re = /<a[^\u003e]*href=["']\/library\/[^"']*:\d+(?:\.\d+)?[mb][^"']*["'][^\u003e]*>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const sizeMatch = m[0].match(/:(\d+(?:\.\d+)?)([mb])/i);
+    if (!sizeMatch) continue;
+    const val = parseFloat(sizeMatch[1]);
+    const unit = sizeMatch[2].toLowerCase();
+    const size = unit === 'm' ? val / 1000 : val;
+    if (!sizes.includes(size)) sizes.push(size);
+  }
+  return sizes;
+}
+
+async function fetchTagsPageSizes(name) {
+  try {
+    const r = await fetch(`${BASE_URL}/library/${name}/tags`, { headers: HEADERS });
+    if (!r.ok) return [];
+    return extractSizesFromTagsPage(await r.text());
+  } catch (e) {
+    return [];
+  }
+}
+
+async function fetchRawModelPage(name) {
+  const url = `${BASE_URL}/library/${name}`;
+  try {
+    const r = await fetch(url, { headers: HEADERS });
+    if (!r.ok) return '';
+    return await r.text();
+  } catch (e) {
+    return '';
+  }
+}
+
 async function fetchModelPage(name) {
   const url = `${BASE_URL}/library/${name}`;
   try {
@@ -131,7 +209,13 @@ async function fetchModelPage(name) {
     const description = extractMetaDescription(html);
     const pageStats = extractStatsFromBlock(html);
     const relativeUpdated = pageStats.relativeUpdated || extractRelativeUpdated(html);
-    const pageTags = extractTags(html);
+    const rawPageTags = extractTags(html);
+    const pageTags = dedupeTags(rawPageTags);
+    // Older models may have no visible chip tags; fall back to tag dropdown links.
+    let finalPageTags = pageTags;
+    if (pageTags.length === 0) {
+      finalPageTags = dedupeTags(extractTagsFromDropdown(html));
+    }
     const parsed = parseRelativeDate(relativeUpdated);
     return {
       description,
@@ -139,7 +223,7 @@ async function fetchModelPage(name) {
       pull_value: pageStats.pullValue || normalizePullValue(pageStats.pullCount || ''),
       relative_updated: parsed.relative,
       estimated_updated_iso: parsed.estimated_iso,
-      tags: pageTags
+      tags: finalPageTags
     };
   } catch (e) {
     return { description: '', pull_count: '', pull_value: '', relative_updated: '', estimated_updated_iso: null, tags: [], error: e.message };
@@ -162,6 +246,11 @@ function extractTags(html) {
     if (txt && !tags.includes(txt)) tags.push(txt);
   }
   return tags;
+}
+
+function dedupeTags(tags) {
+  // Ollama renders duplicate tags (e.g. latest twice). Keep first occurrence.
+  return [...new Set(tags)];
 }
 
 function extractPattern(html, pattern, tagName) {
@@ -309,6 +398,7 @@ async function scrapeLibrary() {
       const txt = tm[1].trim();
       if (txt && !tags.includes(txt)) tags.push(txt);
     }
+    const dedupedTags = dedupeTags(tags);
     const extractedStats = extractStatsFromBlock(block);
     let pullCount = extractedStats.pullCount || '';
     let pullValue = extractedStats.pullValue || '';
@@ -318,7 +408,7 @@ async function scrapeLibrary() {
       name,
       title,
       ollama_url: `${BASE_URL}/library/${name}`,
-      listing_tags: tags,
+      listing_tags: dedupedTags,
       cloud,
       pull_count: pullCount,
       pull_value: pullValue,
@@ -331,7 +421,15 @@ async function scrapeLibrary() {
 async function enrichModel(model) {
   const details = await fetchModelPage(model.name);
   const allTags = [...new Set([...(model.listing_tags || []), ...(details.tags || [])])];
-  const sizes = extractSizes(allTags);
+  let sizes = extractSizes(allTags);
+  // Some models (e.g. nomic-embed-text, glm-ocr, openhermes) have no size tags on
+  // the main page; derive sizes from the /tags page links instead.
+  if (!sizes.length) {
+    const fallbackSizes = await fetchTagsPageSizes(model.name);
+    for (const s of fallbackSizes) {
+      if (!sizes.includes(s)) sizes.push(s);
+    }
+  }
   const categories = classify(model.name, allTags, details.description);
   const hermes = isHermesCompatible(model.name, allTags, details.description);
   const pullCount = model.pull_count || details.pull_count || '';
